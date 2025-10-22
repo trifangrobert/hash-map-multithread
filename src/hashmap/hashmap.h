@@ -6,7 +6,7 @@
 
 #include "locks/rw_lock.h"
 
-template <typename K, typename V, int SZ = 1000>
+template <typename K, typename V, int SZ = 1000, typename Hash = std::hash<K>>
 class HashMap {
 public:
     size_t hash_fn(const K& key) {
@@ -71,7 +71,7 @@ public:
     }
 
 private:
-    std::hash<K> hasher;
+    Hash hasher;
     std::vector<std::vector<std::pair<K, V>>> hash_map;
     std::vector<RWLock> rwlocks;
 };
