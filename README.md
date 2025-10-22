@@ -6,9 +6,8 @@ A high-performance, thread-safe hash map implementation in C++ featuring fine-gr
 
 - **Thread-Safe**: Concurrent reads and exclusive writes using custom read-write locks
 - **Fine-Grained Locking**: One lock per bucket for maximum concurrency
-- **Modern C++**: Uses `std::optional`, templates, and perfect forwarding
 - **Writer-Preference**: Prevents reader starvation of writers
-- **Exception-Safe**: RAII-based lock management with proper exception handling
+- **Function Caching**: Built-in support for caching expensive function calls with custom types
 
 ## Architecture
 
@@ -16,7 +15,7 @@ A high-performance, thread-safe hash map implementation in C++ featuring fine-gr
 
 - **RWLock**: Custom read-write lock with writer preference
 - **HashMap**: Template-based hash map with separate chaining
-- **Comprehensive Tests**: Multi-threaded test suite with CTest integration
+- **HashCombiner**: Custom hash combiner for key hashing
 
 ### Thread Safety Design
 
@@ -65,6 +64,72 @@ class HashMap
 - `V`: Value type
 - `SZ`: Number of buckets (default: 1000)
 
+### Advanced Usage: Function Caching
+
+The HashMap can be used to cache expensive function calls with custom types:
+
+```cpp
+#include "hashmap/hashcombiner.h"
+
+// Custom type for caching
+class StockData {
+public:
+    StockData(const std::string& name, uint64_t ts_before, uint64_t ts_after, uint32_t price_change)
+        : tick_name(name), timestamp_before(ts_before), timestamp_after(ts_after), change_in_price(price_change) {}
+    
+    bool operator==(const StockData& other) const {
+        return tick_name == other.tick_name && timestamp_before == other.timestamp_before && 
+               timestamp_after == other.timestamp_after && change_in_price == other.change_in_price;
+    }
+    
+    double get_ratio() const {
+        return (double)change_in_price / (timestamp_after - timestamp_before);
+    }
+    
+private:
+    std::string tick_name;
+    uint64_t timestamp_before, timestamp_after;
+    uint32_t change_in_price;
+    friend struct std::hash<StockData>;
+};
+
+// Custom hash specialization
+template<>
+struct std::hash<StockData> {
+    size_t operator()(const StockData& obj) const {
+        HashCombiner combiner;
+        combiner.combine(obj.tick_name);
+        combiner.combine(obj.timestamp_before);
+        combiner.combine(obj.timestamp_after);
+        combiner.combine(obj.change_in_price);
+        return combiner;
+    }
+};
+
+// Function cache implementation
+class StockAnalyzer {
+public:
+    double calculate_ratio(const StockData& data) const {
+        // Check cache first
+        auto cached = cache.lookup_k(data);
+        if (cached) {
+            return cached.value();  // Cache hit!
+        }
+        
+        // Expensive computation
+        double ratio = data.get_ratio();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Simulate work
+        
+        // Store in cache
+        cache.insert_kv(data, ratio);
+        return ratio;
+    }
+    
+private:
+    mutable HashMap<StockData, double, 1000> cache;
+};
+```
+
 ## Building and Testing
 
 ### Prerequisites
@@ -96,7 +161,11 @@ ctest -L hashmap   # HashMap tests only
 ### Run Demo
 
 ```bash
+# Basic HashMap demo
 ./main
+
+# Function caching demo
+./cache
 ```
 
 ## Performance
@@ -124,14 +193,7 @@ hash-map-multithread/
 │   └── hashmap/
 │       └── hashmap_test.cpp   # Concurrent hashmap tests
 ├── app/
-│   └── main.cpp               # Demo application
+│   ├── main.cpp               # Basic HashMap demo
+│   └── cache.cpp              # Function caching demo
 └── CMakeLists.txt             # Build configuration
 ```
-
-## Contributing
-
-Feel free to open issues or submit pull requests for improvements!
-
-## License
-
-This project is for educational purposes.
